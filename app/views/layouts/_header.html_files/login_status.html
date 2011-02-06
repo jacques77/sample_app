@@ -1,0 +1,108 @@
+<!DOCTYPE HTML>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+  
+    <title>XD Proxy</title>
+  </head><body onload="doFragmentSend()">
+    <div id="swf_holder" style="position: absolute; top: -10000px; 
+width: 1px; height: 1px;">
+    </div>
+    <script>
+var XdCommUrl = "http:\/\/static.ak.fbcdn.net\/rsrc.php\/v1\/yF\/r\/Y7YCBKX-HZn.swf";var AllowFbCom = false;
+/**
+ * For "proxying" in-browser messages for Connect.
+ *
+ * @author naitik
+ */
+/**
+ * Resolve a id back to a node. An id is a string like:
+ *    top.frames[5].frames['crazy'].parent.frames["two"].opener
+ *
+ * @param   id {String}   the string to resolve
+ * @returns    {Node}     the resolved window object
+ * @throws  SyntaxError   if the id is malformed
+ */
+function resolveRelation(id) {
+  var
+    pt,
+    matches,
+    parts = id.split('.'),
+    node = window;
+
+  for (var i=0, l=parts.length; i<l; i++) {
+    pt = parts[i];
+
+    if (pt === 'opener' || pt === 'parent' || pt === 'top') {
+      node = node[pt];
+    } else if (matches = /^frames\[['"]?([a-zA-Z0-9-_]+)['"]?\]$/.exec(pt)) {
+      // the regex has the `feature' of fixing some badly quote strings
+      node = node.frames[matches[1]];
+    } else {
+      throw new SyntaxError('Malformed id to resolve: ' + id + ', pt: ' + pt);
+    }
+  }
+
+  return node;
+}
+
+function createXdCommSwf() {
+  var
+    IE = !!document.attachEvent,
+    html = (
+    '<object ' +
+      'type="application/x-shockwave-flash" ' +
+      'id="XdComm" ' +
+      (IE ? 'name="XdComm" ' : '') +
+      (IE ? '' : 'data="' + XdCommUrl + '" ') +
+      (IE
+       ? 'classid="clsid:d27cdb6e-ae6d-11cf-96b8-444553540000" '
+       : ''
+      ) +
+      'allowscriptaccess="always">' +
+      '<param name="movie" value="' + XdCommUrl + '"></param>' +
+      '<param name="allowscriptaccess" value="always"></param>' +
+    '</object>'
+  );
+
+  document.getElementById('swf_holder').innerHTML = html;
+}
+
+/**
+ * Kick off the send process based on the current Fragment.
+ */
+function doFragmentSend() {
+  // this page should not be allowed to run on facebook.com in production
+  // it should be used from the fbcdn.net domain
+  if (!AllowFbCom && /(^|\.)facebook.com$/.test(document.domain.toString())) {
+    return;
+  }
+
+  var
+    location = window.location.toString(),
+    fragment = location.substr(location.indexOf('#') + 1),
+    params = {},
+    parts = fragment.split('&'),
+    i,
+    pair;
+
+  for (i=0; i<parts.length; i++) {
+    pair = parts[i].split('=', 2);
+    params[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1]);
+  }
+
+  // either send the message via postMessage, or via Flash
+  if (params.transport == 'postmessage') {
+    resolveRelation(params.relation).postMessage(fragment, params.origin);
+  } else if (params.transport == 'flash') {
+    var name = window.location.toString() + Math.random();
+    window.FB_OnFlashXdCommReady = function() {
+      document.XdComm.postMessage_init('dummy', name);
+      document.XdComm.postMessage_send(fragment, params.origin);
+    };
+
+    createXdCommSwf();
+  }
+}
+    </script>
+  </body></html>
